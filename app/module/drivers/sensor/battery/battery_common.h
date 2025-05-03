@@ -19,3 +19,6 @@ int battery_channel_get(const struct battery_value *value, enum sensor_channel c
                         struct sensor_value *val_out);
 
 uint8_t lithium_ion_mv_to_pct(int16_t bat_mv);
+
+uint8_t mv_to_pct_linear_interpolation(int16_t bat_mv, int16_t *mv_thresholds,
+                                       size_t mv_thresholds_size);
