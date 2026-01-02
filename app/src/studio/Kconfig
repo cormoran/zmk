@@ -95,6 +95,17 @@ config ZMK_STUDIO_RPC_TX_BUF_SIZE
     int "TX Buffer Size"
     default 64
 
+config ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_IDENTIFIER_MAX_LEN
+    int "Custom Subsystem Identifier Max Length"
+    default 32
+
+config ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_REQUEST_PAYLOAD_MAX_BYTES
+    int "Custom Subsystem Request Payload Max Bytes"
+    default 25
+    help
+      Maximum size of the payload in a custom subsystem request.
+      This value need to be smaller than ZMK_STUDIO_RPC_RX_BUF_SIZE + other field overheads.
+
 endif
 
 endif
