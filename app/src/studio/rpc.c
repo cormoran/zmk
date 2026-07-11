@@ -117,7 +117,14 @@ static pb_istream_t pb_istream_for_rx_ring_buf() {
 
 RING_BUF_DECLARE(rpc_tx_buf, CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE);
 
+/* Given by a transport once it has drained bytes out of rpc_tx_buf, to wake the
+ * encoder thread waiting for room instead of having it poll on a fixed sleep.
+ * Mirrors rpc_rx_sem/zmk_rpc_rx_notify() on the receive side. */
+static K_SEM_DEFINE(rpc_tx_sem, 0, 1);
+
 struct ring_buf *zmk_rpc_get_tx_buf(void) { return &rpc_tx_buf; }
+
+void zmk_rpc_tx_notify(void) { k_sem_give(&rpc_tx_sem); }
 
 static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t count) {
     void *user_data = stream->state;
@@ -131,7 +138,10 @@ static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t
         uint32_t claim_len = ring_buf_put_claim(&rpc_tx_buf, &write_buf, count - written);
 
         if (claim_len == 0) {
-            k_sleep(K_MSEC(1));
+            /* Buffer is full; block until a transport drains it (zmk_rpc_tx_notify)
+             * instead of polling. The timeout keeps the old ~1ms cadence as a
+             * fallback in case the active transport never signals. */
+            k_sem_take(&rpc_tx_sem, K_MSEC(1));
             continue;
         }
 
@@ -199,7 +209,7 @@ static int send_response(const zmk_studio_Response *resp) {
             err = -ENOMEM;
             goto exit;
         }
-        k_sleep(K_MSEC(1));
+        k_sem_take(&rpc_tx_sem, K_MSEC(1));
     }
 
     selected_transport->tx_notify(&rpc_tx_buf, 1, false, user_data);
@@ -228,7 +238,7 @@ static int send_response(const zmk_studio_Response *resp) {
             err = -ENOMEM;
             goto exit;
         }
-        k_sleep(K_MSEC(1));
+        k_sem_take(&rpc_tx_sem, K_MSEC(1));
     }
 
     selected_transport->tx_notify(&rpc_tx_buf, 1, true, user_data);

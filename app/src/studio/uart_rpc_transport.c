@@ -35,6 +35,7 @@ static void tx_notify(struct ring_buf *tx_ring_buf, size_t written, bool msg_don
             }
 
             ring_buf_get_finish(tx_buf, claim_len);
+            zmk_rpc_tx_notify();
         }
 #endif
     }
@@ -137,6 +138,9 @@ static void serial_cb(const struct device *dev, void *user_data) {
 
             ring_buf_get_finish(tx_buf, MAX(sent, 0));
         }
+
+        /* Freed room in the TX buffer; wake the encoder if it is waiting. */
+        zmk_rpc_tx_notify();
     }
 }
 
