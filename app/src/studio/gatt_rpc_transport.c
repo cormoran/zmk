@@ -165,6 +165,9 @@ static void notif_rpc_tx_cb(struct k_work *work) {
             ring_buf_get_finish(tx_buf, len);
         }
 
+        /* Freed room in the TX buffer; wake the encoder if it is waiting. */
+        zmk_rpc_tx_notify();
+
         rpc_indicate_params.len = added;
 
         int err = bt_gatt_indicate(conn, &rpc_indicate_params);

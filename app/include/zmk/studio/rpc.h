@@ -219,6 +219,10 @@ struct ring_buf *zmk_rpc_get_tx_buf(void);
 struct ring_buf *zmk_rpc_get_rx_buf(void);
 void zmk_rpc_rx_notify(void);
 
+/* Called by a transport after it drains bytes out of the TX ring buffer, to wake
+ * the encoder thread that may be waiting for space. Mirrors zmk_rpc_rx_notify(). */
+void zmk_rpc_tx_notify(void);
+
 #define ZMK_RPC_TRANSPORT(name, _transport, _rx_start, _rx_stop, _tx_user_data, _tx_notify)        \
     STRUCT_SECTION_ITERABLE(zmk_rpc_transport, name) = {                                           \
         .transport = _transport,                                                                   \
