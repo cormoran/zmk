@@ -91,6 +91,20 @@ config ZMK_STUDIO_TRANSPORT_BLE
 config BT_CONN_TX_MAX
     default 64 if ZMK_STUDIO_TRANSPORT_BLE
 
+# Large Studio responses (keymap dumps) are painfully slow at the stock 65-byte
+# ATT MTU and 27-byte ACL TX buffers: every RPC-response indication would carry
+# only ~20-62 bytes, so a multi-KB response needs a hundred-plus connection-
+# interval round trips and the Studio client times out. Raise the ATT MTU and
+# ACL buffers so each indication can carry a full payload. Costs some RAM.
+config BT_L2CAP_TX_MTU
+    default 247 if ZMK_STUDIO_TRANSPORT_BLE
+
+config BT_BUF_ACL_TX_SIZE
+    default 251 if ZMK_STUDIO_TRANSPORT_BLE
+
+config BT_BUF_ACL_RX_SIZE
+    default 251 if ZMK_STUDIO_TRANSPORT_BLE
+
 if ZMK_STUDIO_TRANSPORT_BLE
 
 config ZMK_STUDIO_TRANSPORT_BLE_PREF_LATENCY
@@ -99,6 +113,15 @@ config ZMK_STUDIO_TRANSPORT_BLE_PREF_LATENCY
     help
       When the studio UI is connected, a lower latency can be requested in order
       to make the interactions between keyboard and studio faster.
+
+config ZMK_STUDIO_TRANSPORT_BLE_INDICATE_SIZE
+    int "BLE Studio RPC max indication payload (bytes)"
+    default 247
+    help
+      Largest RPC-response chunk sent per GATT indication. Larger values cut the
+      number of connection-interval round trips a big response (e.g. a keymap
+      dump) needs, at some RAM cost. The effective size is
+      min(this, negotiated ATT MTU - 3).
 
 endif
 
