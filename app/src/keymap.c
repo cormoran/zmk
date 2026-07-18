@@ -521,6 +521,37 @@ int zmk_keymap_check_unsaved_changes(void) {
     return 0;
 }
 
+int zmk_keymap_layer_binding_at_idx_is_pending(zmk_keymap_layer_id_t layer_id,
+                                               uint16_t binding_idx) {
+    if (binding_idx >= ZMK_KEYMAP_LEN) {
+        return -EINVAL;
+    }
+
+    ASSERT_LAYER_VAL(layer_id, -EINVAL)
+
+    const uint32_t *pos_map;
+    int ret = zmk_physical_layouts_get_selected_to_stock_position_map(&pos_map);
+    if (ret < 0) {
+        LOG_WRN("Failed to get the position map to check for a pending binding (%d)", ret);
+        return ret;
+    }
+
+    if (binding_idx >= ret) {
+        LOG_WRN("Can't check pending state for unmapped binding index %d", binding_idx);
+        return -EINVAL;
+    }
+
+    uint32_t storage_binding_idx = pos_map[binding_idx];
+
+    if (storage_binding_idx >= ZMK_KEYMAP_LEN) {
+        return -EINVAL;
+    }
+
+    uint8_t *pending = zmk_keymap_layer_pending_changes[layer_id];
+
+    return (pending[storage_binding_idx / 8] & BIT(storage_binding_idx % 8)) ? 1 : 0;
+}
+
 #define LAYER_ORDER_SETTINGS_KEY "keymap/layer_order"
 #define LAYER_NAME_SETTINGS_KEY "keymap/l_n/%d"
 #define LAYER_BINDING_SETTINGS_KEY "keymap/l/%d/%d"
@@ -726,6 +757,11 @@ int zmk_keymap_save_changes(void) { return -ENOTSUP; }
 int zmk_keymap_discard_changes(void) { return -ENOTSUP; }
 
 int zmk_keymap_reset_settings(void) { return -ENOTSUP; }
+
+int zmk_keymap_layer_binding_at_idx_is_pending(zmk_keymap_layer_id_t layer_id,
+                                               uint16_t binding_idx) {
+    return -ENOTSUP;
+}
 
 #endif // IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE)
 
