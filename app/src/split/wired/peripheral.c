@@ -25,6 +25,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/sensors.h>
 #include <zmk/split/transport/peripheral.h>
 #include <zmk/split/transport/types.h>
+#include <zmk/split/wired/peripheral.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/sensor_event.h>
@@ -56,6 +57,10 @@ K_SEM_DEFINE(tx_sem, 0, 1);
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
 static const struct device *uart = DEVICE_DT_GET(DT_INST_PHANDLE(0, device));
+
+volatile static uint32_t last_send_event_ms = 0;
+volatile static uint32_t last_received_event_ms = 0;
+volatile bool transport_is_heathy = false;
 
 #define HAS_DIR_GPIO (DT_INST_NODE_HAS_PROP(0, dir_gpios))
 
@@ -132,8 +137,6 @@ static void begin_rx(void) {
 #endif
 }
 
-#if HAS_DETECT_GPIO
-
 static void stop_rx(void) {
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_WIRED_UART_MODE_INTERRUPT)
     uart_irq_rx_disable(uart);
@@ -149,8 +152,6 @@ static void stop_rx(void) {
     pm_device_action_run(uart, PM_DEVICE_ACTION_SUSPEND);
 #endif // IS_ENABLED(CONFIG_PM_DEVICE)
 }
-
-#endif // HAS_DETECT_GPIO
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_WIRED_UART_MODE_INTERRUPT)
 
@@ -189,15 +190,42 @@ static K_WORK_DEFINE(send_pending_tx, send_pending_tx_work_cb);
 
 #endif
 
-#if HAS_DETECT_GPIO
+static int
+split_peripheral_wired_report_event(const struct zmk_split_transport_peripheral_event *event);
 
 static void notify_transport_status(void);
-
-static struct gpio_callback detect_callback;
 
 static void notify_status_work_cb(struct k_work *_work) { notify_transport_status(); }
 
 static K_WORK_DEFINE(notify_status_work, notify_status_work_cb);
+
+static void send_heart_beat_handler(struct k_work *work) {
+    struct zmk_split_transport_peripheral_event ev = {
+        .type = ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_HEART_BEAT_EVENT,
+    };
+    split_peripheral_wired_report_event(&ev);
+}
+
+static void health_check_timeout_handler(struct k_work *work) {
+    bool previous_healthy_state = transport_is_heathy;
+    uint32_t interval_ms = k_uptime_get_32() - last_received_event_ms;
+    transport_is_heathy = interval_ms < DT_INST_PROP(0, health_check_interval_ms);
+    if (previous_healthy_state != transport_is_heathy) {
+        LOG_WRN("Transport health state changed to %d", transport_is_heathy);
+        k_work_submit(&notify_status_work);
+    } else {
+        LOG_WRN("Health check timeout occurred after %d ms", interval_ms);
+    }
+}
+
+static K_WORK_DEFINE(send_heart_beat_work, send_heart_beat_handler);
+static K_WORK_DELAYABLE_DEFINE(health_check_timeout_work, health_check_timeout_handler);
+
+bool zmk_split_wired_peripheral_is_healthy(void) { return transport_is_heathy; }
+
+#if HAS_DETECT_GPIO
+
+static struct gpio_callback detect_callback;
 
 static void detect_pin_irq_callback_handler(const struct device *port, struct gpio_callback *cb,
                                             const gpio_port_pins_t pin) {
@@ -205,7 +233,7 @@ static void detect_pin_irq_callback_handler(const struct device *port, struct gp
 }
 
 #endif
-
+static int split_peripheral_wired_set_enabled_internal(bool enabled);
 static int zmk_split_wired_peripheral_init(void) {
     if (!device_is_ready(uart)) {
         return -ENODEV;
@@ -263,7 +291,8 @@ static int zmk_split_wired_peripheral_init(void) {
     }
 
 #endif // HAS_DETECT_GPIO
-
+    // TODO: Enable wired transport only during 5V is provided
+    split_peripheral_wired_set_enabled_internal(true);
     return 0;
 }
 
@@ -289,6 +318,8 @@ static ssize_t get_payload_data_size(const struct zmk_split_transport_peripheral
         return sizeof(evt->data.sensor_event);
     case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_BATTERY_EVENT:
         return sizeof(evt->data.battery_event);
+    case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_HEART_BEAT_EVENT:
+        return 0;
     default:
         return -ENOTSUP;
     }
@@ -311,6 +342,8 @@ split_peripheral_wired_report_event(const struct zmk_split_transport_peripheral_
                 MSG_EXTRA_SIZE + payload_size, ring_buf_space_get(&chosen_tx_buf));
         return -ENOSPC;
     }
+
+    last_send_event_ms = k_uptime_get_32();
 
     struct event_envelope env = {.prefix =
                                      {
@@ -346,7 +379,9 @@ split_peripheral_wired_report_event(const struct zmk_split_transport_peripheral_
 
 static bool is_enabled;
 
-static int split_peripheral_wired_set_enabled(bool enabled) {
+static int split_peripheral_wired_set_enabled(bool enabled) { return 0; }
+static int split_peripheral_wired_set_enabled_internal(bool enabled) {
+    enabled = true;
     if (is_enabled == enabled) {
         return 0;
     }
@@ -356,17 +391,13 @@ static int split_peripheral_wired_set_enabled(bool enabled) {
     if (enabled) {
         begin_rx();
         return 0;
-#if HAS_DETECT_GPIO
     } else {
         stop_rx();
         return 0;
-#endif
     }
 
     return -ENOTSUP;
 }
-
-#if HAS_DETECT_GPIO
 
 static zmk_split_transport_peripheral_status_changed_cb_t transport_status_cb;
 
@@ -377,6 +408,16 @@ split_peripheral_wired_set_status_callback(zmk_split_transport_peripheral_status
 }
 
 static struct zmk_split_transport_status split_peripheral_wired_get_status() {
+    if (!transport_is_heathy) {
+        LOG_WRN("Transport is unhealthy");
+        return (struct zmk_split_transport_status){
+            .available = false,
+            .enabled = true, // Track this
+            .connections = ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_DISCONNECTED,
+
+        };
+    }
+#if HAS_DETECT_GPIO
     int detected = gpio_pin_get_dt(&detect_gpio);
     if (detected > 0) {
         return (struct zmk_split_transport_status){
@@ -393,23 +434,25 @@ static struct zmk_split_transport_status split_peripheral_wired_get_status() {
 
         };
     }
-}
+#else
+    return (struct zmk_split_transport_status){
+        .available = true,
+        .enabled = true, // Track this
+        .connections = ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_ALL_CONNECTED,
 
+    };
 #endif // HAS_DETECT_GPIO
+}
 
 static const struct zmk_split_transport_peripheral_api peripheral_api = {
     .report_event = split_peripheral_wired_report_event,
     .set_enabled = split_peripheral_wired_set_enabled,
-#if HAS_DETECT_GPIO
     .set_status_callback = split_peripheral_wired_set_status_callback,
     .get_status = split_peripheral_wired_get_status,
-#endif // HAS_DETECT_GPIO
 };
 
 ZMK_SPLIT_TRANSPORT_PERIPHERAL_REGISTER(wired_peripheral, &peripheral_api,
                                         CONFIG_ZMK_SPLIT_WIRED_PRIORITY);
-
-#if HAS_DETECT_GPIO
 
 static void notify_transport_status(void) {
     if (transport_status_cb) {
@@ -418,8 +461,6 @@ static void notify_transport_status(void) {
     }
 }
 
-#endif // HAS_DETECT_GPIO
-
 static void process_tx_cb(void) {
     while (ring_buf_size_get(&chosen_rx_buf) > MSG_EXTRA_SIZE) {
         struct command_envelope env;
@@ -427,7 +468,21 @@ static void process_tx_cb(void) {
                                                 sizeof(struct command_envelope));
         switch (item_err) {
         case 0:
+            last_received_event_ms = k_uptime_get_32();
+            if (transport_is_heathy) {
+                k_work_reschedule(&health_check_timeout_work,
+                                  K_MSEC(DT_INST_PROP(0, health_check_interval_ms)));
+            } else {
+                // To change transport to healthy state
+                k_work_reschedule(&health_check_timeout_work, K_NO_WAIT);
+            }
+
             if (env.payload.cmd.type == ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_POLL_EVENTS) {
+                if (k_uptime_get_32() - last_send_event_ms >
+                    DT_INST_PROP(0, heart_beat_interval_ms)) {
+                    k_work_submit(&send_heart_beat_work);
+                }
+
                 begin_tx();
             } else {
                 int ret = k_msgq_put(&cmd_msg_queue, &env.payload.cmd, K_NO_WAIT);

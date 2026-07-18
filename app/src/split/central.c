@@ -72,6 +72,8 @@ int zmk_split_transport_central_peripheral_event_handler(
 
         return raise_zmk_sensor_event(sensor_ev);
     }
+    case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_HEART_BEAT_EVENT:
+        return 0;
     default:
         LOG_WRN("GOT AN UNKNOWN EVENT TYPE %d", ev.type);
         return -ENOTSUP;

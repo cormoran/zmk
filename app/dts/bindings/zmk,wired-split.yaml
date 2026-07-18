@@ -25,3 +25,16 @@ properties:
   dir-gpios:
     type: phandle-array
     description: "Experimental: Set the communication direction. Used for RS-422 style comms."
+
+  health-check-interval-ms:
+    type: int
+    default: 1000
+    description: |
+      Interval in milliseconds between health checks to the split side.
+      If peripheral does not respond within the interval, the transport becomes inactive.
+
+  heart-beat-interval-ms:
+    type: int
+    default: 800
+    description: |
+      Interval in milliseconds between heart-beat events sent from peripheral to central.

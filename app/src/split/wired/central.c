@@ -27,9 +27,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/event_manager.h>
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/sensor_event.h>
+#include <zmk/events/usb_conn_state_changed.h>
 #include <zmk/pointing/input_split.h>
 #include <zmk/hid_indicators_types.h>
 #include <zmk/physical_layouts.h>
+#include <zmk/usb.h>
 
 #include "wired.h"
 
@@ -57,6 +59,9 @@ RING_BUF_DECLARE(tx_buf, TX_BUFFER_SIZE);
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
 static const struct device *uart = DEVICE_DT_GET(DT_INST_PHANDLE(0, device));
+
+volatile static uint32_t last_healthy_response_ms = 0;
+volatile static bool transport_is_heathy = false;
 
 #define HAS_DIR_GPIO (IS_HALF_DUPLEX_MODE && DT_INST_NODE_HAS_PROP(0, dir_gpios))
 
@@ -155,8 +160,6 @@ static void begin_rx(void) {
 #endif
 }
 
-#if HAS_DETECT_GPIO
-
 static void stop_rx(void) {
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_WIRED_UART_MODE_INTERRUPT)
     uart_irq_rx_disable(uart);
@@ -172,8 +175,6 @@ static void stop_rx(void) {
     pm_device_action_run(uart, PM_DEVICE_ACTION_SUSPEND);
 #endif // IS_ENABLED(CONFIG_PM_DEVICE)
 }
-
-#endif // HAS_DETECT_GPIO
 
 static ssize_t get_payload_data_size(const struct zmk_split_transport_central_command *cmd) {
     switch (cmd->type) {
@@ -294,15 +295,27 @@ static void send_pending_tx_work_cb(struct k_work *work) {
 
 #endif
 
-#if HAS_DETECT_GPIO
-
 static void notify_transport_status(void);
-
-static struct gpio_callback detect_callback;
 
 static void notify_status_work_cb(struct k_work *_work) { notify_transport_status(); }
 
 static K_WORK_DEFINE(notify_status_work, notify_status_work_cb);
+
+static void health_check_timer_callback_handler(struct k_timer *timer) {
+    bool previous_healthy_state = transport_is_heathy;
+    transport_is_heathy =
+        (k_uptime_get_32() - last_healthy_response_ms) <= DT_INST_PROP(0, health_check_interval_ms);
+    if (previous_healthy_state != transport_is_heathy) {
+        LOG_INF("Transport health state changed to %d", transport_is_heathy);
+        k_work_submit(&notify_status_work);
+    }
+}
+
+K_TIMER_DEFINE(health_check_timer, health_check_timer_callback_handler, NULL);
+
+#if HAS_DETECT_GPIO
+
+static struct gpio_callback detect_callback;
 
 static void detect_pin_irq_callback_handler(const struct device *port, struct gpio_callback *cb,
                                             const gpio_port_pins_t pin) {
@@ -311,6 +324,7 @@ static void detect_pin_irq_callback_handler(const struct device *port, struct gp
 
 #endif
 
+static int split_central_wired_set_enabled(bool enabled);
 static int zmk_split_wired_central_init(void) {
     if (!device_is_ready(uart)) {
         return -ENODEV;
@@ -377,6 +391,10 @@ static int zmk_split_wired_central_init(void) {
 
 #endif // HAS_DETECT_GPIO
 
+    k_timer_start(&health_check_timer, K_MSEC(DT_INST_PROP(0, health_check_interval_ms)),
+                  K_MSEC(DT_INST_PROP(0, health_check_interval_ms)));
+    // TODO: stop timer when suspend
+    // split_central_wired_set_enabled_internal(true); // enabled by USB
     return 0;
 }
 
@@ -389,26 +407,26 @@ static int split_central_wired_get_available_source_ids(uint8_t *sources) {
 }
 
 static int split_central_wired_set_enabled(bool enabled) {
+    enabled = true; // TODO:
+}
+
+static int split_central_wired_set_enabled_internal(bool enabled) {
     if (enabled) {
         begin_rx();
 #if IS_HALF_DUPLEX_MODE
         k_work_schedule(&rx_done_work, K_MSEC(CONFIG_ZMK_SPLIT_WIRED_HALF_DUPLEX_RX_TIMEOUT));
 #endif
         return 0;
-#if HAS_DETECT_GPIO
     } else {
 #if IS_HALF_DUPLEX_MODE
         k_work_cancel_delayable(&rx_done_work);
 #endif
         stop_rx();
         return 0;
-#endif
     }
 
     return -ENOTSUP;
 }
-
-#if HAS_DETECT_GPIO
 
 static zmk_split_transport_central_status_changed_cb_t transport_status_cb;
 
@@ -419,6 +437,27 @@ split_central_wired_set_status_callback(zmk_split_transport_central_status_chang
 }
 
 static struct zmk_split_transport_status split_central_wired_get_status() {
+    if (!transport_is_heathy) {
+        LOG_WRN("Transport is not healthy because last response was at %d ms",
+                last_healthy_response_ms);
+        return (struct zmk_split_transport_status){
+            .available = false,
+            .enabled = true, // Track this
+            .connections = ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_DISCONNECTED,
+
+        };
+    }
+    // TODO: check settings
+    if (zmk_usb_get_conn_state() == ZMK_USB_CONN_NONE) {
+        LOG_WRN("USB is not connected");
+        return (struct zmk_split_transport_status){
+            .available = false,
+            .enabled = true, // Track this
+            .connections = ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_DISCONNECTED,
+
+        };
+    }
+#if HAS_DETECT_GPIO
     int detected = gpio_pin_get_dt(&detect_gpio);
     if (detected > 0) {
         return (struct zmk_split_transport_status){
@@ -435,31 +474,31 @@ static struct zmk_split_transport_status split_central_wired_get_status() {
 
         };
     }
-}
+#else
+    return (struct zmk_split_transport_status){
+        .available = true,
+        .enabled = true, // Track this
+        .connections = ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_ALL_CONNECTED,
 
+    };
 #endif // HAS_DETECT_GPIO
+}
 
 static const struct zmk_split_transport_central_api central_api = {
     .send_command = split_central_wired_send_command,
     .get_available_source_ids = split_central_wired_get_available_source_ids,
     .set_enabled = split_central_wired_set_enabled,
-#if HAS_DETECT_GPIO
     .set_status_callback = split_central_wired_set_status_callback,
     .get_status = split_central_wired_get_status,
-#endif // HAS_DETECT_GPIO
 };
 
 ZMK_SPLIT_TRANSPORT_CENTRAL_REGISTER(wired_central, &central_api, CONFIG_ZMK_SPLIT_WIRED_PRIORITY);
-
-#if HAS_DETECT_GPIO
 
 static void notify_transport_status(void) {
     if (transport_status_cb) {
         transport_status_cb(&wired_central, split_central_wired_get_status());
     }
 }
-
-#endif
 
 static void publish_events_work(struct k_work *work) {
 
@@ -474,6 +513,7 @@ static void publish_events_work(struct k_work *work) {
             zmk_split_wired_get_item(&rx_buf, (uint8_t *)&env, sizeof(struct event_envelope));
         switch (item_err) {
         case 0:
+            last_healthy_response_ms = k_uptime_get_32();
             zmk_split_transport_central_peripheral_event_handler(&wired_central, env.payload.source,
                                                                  env.payload.event);
             break;
@@ -485,3 +525,18 @@ static void publish_events_work(struct k_work *work) {
         }
     }
 }
+
+static int endpoint_changed_cb(const zmk_event_t *eh) {
+    if (as_zmk_usb_conn_state_changed(eh)) {
+        if (zmk_usb_get_conn_state() == ZMK_USB_CONN_NONE) {
+            split_central_wired_set_enabled_internal(false);
+        } else {
+            split_central_wired_set_enabled_internal(true);
+        }
+        k_work_submit(&notify_status_work);
+    }
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(split_wired, endpoint_changed_cb);
+ZMK_SUBSCRIPTION(split_wired, zmk_usb_conn_state_changed);
