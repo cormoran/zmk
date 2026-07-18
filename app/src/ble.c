@@ -746,6 +746,10 @@ static int zmk_ble_init(void) {
     }
 
 #if IS_ENABLED(CONFIG_SETTINGS)
+    // Registering before the settings subsystem is initialized would be
+    // undone: settings_init() resets the dynamic handler list. Initialize it
+    // first (idempotent) so this handler survives until settings_load().
+    settings_subsys_init();
     settings_register(&profiles_handler);
     k_work_init_delayable(&ble_save_work, ble_save_profile_work);
 #else
