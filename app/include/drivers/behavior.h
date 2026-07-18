@@ -148,8 +148,8 @@ struct zmk_behavior_local_id_map {
     static const STRUCT_SECTION_ITERABLE(zmk_behavior_ref, name) =                                 \
         ZMK_BEHAVIOR_REF_INITIALIZER(node_id, _dev);                                               \
     COND_CODE_1(IS_ENABLED(CONFIG_ZMK_BEHAVIOR_LOCAL_IDS),                                         \
-                (static const STRUCT_SECTION_ITERABLE(zmk_behavior_local_id_map,                   \
-                                                      _CONCAT(_zmk_behavior_local_id_map, name)) = \
+                (static STRUCT_SECTION_ITERABLE(zmk_behavior_local_id_map,                         \
+                                                _CONCAT(_zmk_behavior_local_id_map, name)) =       \
                      ZMK_BEHAVIOR_LOCAL_ID_MAP_INITIALIZER(node_id, _dev)),                        \
                 ());
 
