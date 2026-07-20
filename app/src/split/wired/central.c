@@ -13,6 +13,8 @@
 #include <zephyr/sys/crc.h>
 #include <zephyr/sys/ring_buffer.h>
 
+#include <string.h>
+
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -245,7 +247,44 @@ void rx_done_cb(struct k_work *work);
 
 static K_WORK_DELAYABLE_DEFINE(rx_done_work, rx_done_cb);
 
+// The RX-complete timeout only measures wire idle time, so a peripheral that
+// pauses between chunks of a large response (or a busy work queue that delays
+// draining) can make it fire while a framed message is still in flight. If we
+// turned the half-duplex line around then, our POLL would be driven onto the
+// shared wire mid-message and corrupt the rest of it. Defer the turnaround
+// while a framed message is still pending in the RX buffer, bounded so a
+// genuinely lost tail cannot wedge polling forever.
+#define RX_PENDING_FRAME_MAX_DEFERRALS 16
+
+static uint8_t rx_pending_frame_deferrals;
+
+static bool rx_buffer_has_pending_frame(void) {
+    if (ring_buf_size_get(&rx_buf) < sizeof(struct msg_prefix)) {
+        return false;
+    }
+
+    struct msg_prefix prefix;
+    if (ring_buf_peek(&rx_buf, (uint8_t *)&prefix, sizeof(prefix)) != sizeof(prefix)) {
+        return false;
+    }
+
+    // A valid magic prefix means a complete-but-undrained or still-arriving
+    // message; leading noise (no prefix match) is left for the framing layer to
+    // discard and must not block the turnaround.
+    return memcmp(&prefix.magic_prefix, &ZMK_SPLIT_WIRED_ENVELOPE_MAGIC_PREFIX,
+                  sizeof(prefix.magic_prefix)) == 0;
+}
+
 void rx_done_cb(struct k_work *work) {
+    if (rx_buffer_has_pending_frame() &&
+        rx_pending_frame_deferrals < RX_PENDING_FRAME_MAX_DEFERRALS) {
+        rx_pending_frame_deferrals++;
+        k_work_reschedule(&rx_done_work,
+                          K_TICKS(CONFIG_ZMK_SPLIT_WIRED_HALF_DUPLEX_RX_COMPLETE_TIMEOUT));
+        return;
+    }
+    rx_pending_frame_deferrals = 0;
+
     k_sem_give(&tx_sem);
 
     // Poll for the next event data!
@@ -507,6 +546,9 @@ static void notify_transport_status(void) {
 static void publish_events_work(struct k_work *work) {
 
 #if IS_HALF_DUPLEX_MODE
+    // Fresh RX progress: allow the turnaround guard to keep waiting on the rest
+    // of an in-flight message rather than counting this stall against the bound.
+    rx_pending_frame_deferrals = 0;
     k_work_reschedule(&rx_done_work,
                       K_MSEC(CONFIG_ZMK_SPLIT_WIRED_HALF_DUPLEX_RX_COMPLETE_TIMEOUT));
 #endif // IS_HALF_DUPLEX_MODE
