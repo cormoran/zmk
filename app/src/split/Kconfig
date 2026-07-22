@@ -30,6 +30,28 @@ config ZMK_SPLIT_PERIPHERAL_HID_INDICATORS
     help
       Enable propagating the HID (LED) Indicator state to the split peripheral(s).
 
+config ZMK_SPLIT_RELAY_EVENT
+    bool "Relay Events from Peripheral to Central"
+    help
+      Enable relaying events from the split peripheral to the central device.
+
+if ZMK_SPLIT_RELAY_EVENT
+
+config ZMK_SPLIT_RELAY_EVENT_TYPE_NAME_LEN
+    int "Maximum size of relay event type name in bytes"
+    default 4
+    help
+      Maximum size of the event name that can be sent from
+      peripheral to central via relay events.
+
+config ZMK_SPLIT_RELAY_EVENT_DATA_LEN
+    int "Maximum size of event payload to relay in bytes"
+    default 128
+    help
+        Maximum size of the event data payload that can be sent between
+        peripheral and central via relay events.
+endif # ZMK_SPLIT_RELAY_EVENT
+
 endif # ZMK_SPLIT
 
 rsource "bluetooth/Kconfig"

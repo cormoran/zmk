@@ -29,6 +29,13 @@ config ZMK_STUDIO_LOCK_ON_DISCONNECT
 
 endif
 
+config ZMK_STUDIO_LOCK_BLE_DIRECT_ADVERTISING_ON_UNLOCK
+    bool "Enable Directed Advertising on Unlock"
+    default y if ZMK_STUDIO_LOCKING && ZMK_BLE
+    help
+      When enabled, the keyboard will enable directed advertising to active profile
+      during unlock. It's required to detect device from web bluetooth API for some browsers.
+
 menuconfig ZMK_STUDIO_RPC
     bool "Remote Procedure Calls (RPC)"
     select NANOPB
@@ -108,6 +115,25 @@ config ZMK_STUDIO_RPC_RX_BUF_SIZE
 config ZMK_STUDIO_RPC_TX_BUF_SIZE
     int "TX Buffer Size"
     default 64
+
+config ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_PRINT_LIST_ON_START
+    bool "Print Custom Subsystem List on Start"
+    default n
+    help
+      Enable debug logging for custom subsystems on start.
+
+config ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_IDENTIFIER_MAX_LEN
+    int "Custom Subsystem Identifier Max Length"
+    default 32
+
+config ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_REQUEST_PAYLOAD_MAX_BYTES
+    int "Custom Subsystem Request Payload Max Bytes"
+    default ZMK_STUDIO_RPC_RX_BUF_SIZE
+    help
+      Maximum size of the payload in a custom subsystem request.
+      Defaults to ZMK_STUDIO_RPC_RX_BUF_SIZE so the generated custom subsystem request
+      payload capacity follows the configured RPC RX buffer size unless explicitly
+      overridden.
 
 endif
 

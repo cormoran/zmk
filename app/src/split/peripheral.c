@@ -66,6 +66,16 @@ int zmk_split_transport_peripheral_command_handler(
             .indicators = cmd.data.set_hid_indicators.indicators});
     }
 #endif
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
+    case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_RELAY_EVENT: {
+        struct zmk_relay_event_received relay_ev;
+        relay_ev.source = 0; // Central is always source 0
+        relay_ev.event_name = cmd.data.relay_event.event_type;
+        relay_ev.event_data = cmd.data.relay_event.event_data;
+        relay_ev.event_data_size = cmd.data.relay_event.header.event_data_size;
+        return raise_zmk_relay_event_received(relay_ev);
+    }
+#endif
     default:
         LOG_WRN("Unhandled command type %d", cmd.type);
         return -ENOTSUP;

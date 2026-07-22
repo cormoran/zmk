@@ -61,6 +61,7 @@ enum advertising_type {
 
 static struct zmk_ble_profile profiles[ZMK_BLE_PROFILE_COUNT];
 static uint8_t active_profile;
+static bool directed_advertising_enabled = false;
 
 #define DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
@@ -191,6 +192,8 @@ int update_advertising(void) {
 
         // LOG_DBG("Directed advertising to %s", addr_str);
         // desired_adv = ZMK_ADV_DIR;
+    } else if (directed_advertising_enabled) {
+        desired_adv = ZMK_ADV_CONN; // TODO: Change back to ZMK_ADV_DIR when fixed
     }
     LOG_DBG("advertising from %d to %d", advertising_status, desired_adv);
 
@@ -372,6 +375,11 @@ int zmk_ble_set_device_name(char *name) {
             return err;
         }
     }
+    return update_advertising();
+}
+
+int zmk_ble_set_directed_advertising(bool enable) {
+    directed_advertising_enabled = enable;
     return update_advertising();
 }
 

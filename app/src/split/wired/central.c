@@ -185,6 +185,16 @@ static ssize_t get_payload_data_size(const struct zmk_split_transport_central_co
         return sizeof(cmd->data.set_physical_layout);
     case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_HID_INDICATORS:
         return sizeof(cmd->data.set_hid_indicators);
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
+    case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_RELAY_EVENT: {
+        // Only the header, event type name and the bytes of event data actually in use are sent,
+        // instead of the whole fixed-size relay event buffer. event_data is the trailing field, so
+        // truncating it keeps the header and event_type at the offsets the receiver reconstructs.
+        uint8_t data_len = MIN(cmd->data.relay_event.header.event_data_size,
+                               CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN);
+        return offsetof(struct zmk_split_relay_event_payload, event_data) + data_len;
+    }
+#endif // IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
     default:
         return -ENOTSUP;
     }

@@ -289,6 +289,16 @@ static ssize_t get_payload_data_size(const struct zmk_split_transport_peripheral
         return sizeof(evt->data.sensor_event);
     case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_BATTERY_EVENT:
         return sizeof(evt->data.battery_event);
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
+    case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_RELAY_EVENT: {
+        // Only the header, event type name and the bytes of event data actually in use are sent,
+        // instead of the whole fixed-size relay event buffer. event_data is the trailing field, so
+        // truncating it keeps the header and event_type at the offsets the receiver reconstructs.
+        uint8_t data_len = MIN(evt->data.relay_event.header.event_data_size,
+                               CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN);
+        return offsetof(struct zmk_split_relay_event_payload, event_data) + data_len;
+    }
+#endif // IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
     default:
         return -ENOTSUP;
     }
