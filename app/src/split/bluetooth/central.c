@@ -1385,6 +1385,9 @@ static int zmk_split_bt_central_init(void) {
     bt_conn_cb_register(&conn_callbacks);
 
 #if IS_ENABLED(CONFIG_SETTINGS)
+    // See zmk_ble_init: initialize the settings subsystem (idempotent) before
+    // registering, or settings_init() would drop this handler.
+    settings_subsys_init();
     settings_register(&ble_central_settings_handler);
     return 0;
 #else
