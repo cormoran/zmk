@@ -14,3 +14,7 @@ properties:
   tapping-term-ms:
     type: int
     default: 200
+  ignore-key-positions:
+    type: array
+    required: false
+    default: []

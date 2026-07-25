@@ -30,7 +30,23 @@ enum zmk_split_transport_peripheral_event_type {
     ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_SENSOR_EVENT,
     ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_INPUT_EVENT,
     ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_BATTERY_EVENT,
+    ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_HEART_BEAT_EVENT, // for health check
+    ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_RELAY_EVENT,
 };
+
+struct relay_event_header {
+    uint8_t sequence;        // lower 7 bits are sequence, upper bit indicates final chunk
+    uint8_t event_data_size; // chunk data size on wire, event data size after reassembly
+    uint8_t event_type_size; // filled by library. excluding null terminator
+} __packed;
+
+#ifdef CONFIG_ZMK_SPLIT_RELAY_EVENT
+struct zmk_split_relay_event_payload {
+    struct relay_event_header header;
+    char event_type[CONFIG_ZMK_SPLIT_RELAY_EVENT_TYPE_NAME_LEN + 1]; // +1 is for null terminator
+    uint8_t event_data[CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN];
+} __packed;
+#endif
 
 struct zmk_split_transport_peripheral_event {
     enum zmk_split_transport_peripheral_event_type type;
@@ -58,6 +74,14 @@ struct zmk_split_transport_peripheral_event {
         struct {
             uint8_t level;
         } battery_event;
+#ifdef CONFIG_ZMK_SPLIT_RELAY_EVENT
+        struct {
+            struct relay_event_header header;
+            char event_type[CONFIG_ZMK_SPLIT_RELAY_EVENT_TYPE_NAME_LEN +
+                            1]; // +1 is for null terminator
+            uint8_t event_data[CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN];
+        } relay_event;
+#endif
     } data;
 } __packed;
 
@@ -66,6 +90,9 @@ enum zmk_split_transport_central_command_type {
     ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR,
     ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_PHYSICAL_LAYOUT,
     ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_HID_INDICATORS,
+#ifdef CONFIG_ZMK_SPLIT_RELAY_EVENT
+    ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_RELAY_EVENT,
+#endif
 } __packed;
 
 struct zmk_split_transport_central_command {
@@ -87,5 +114,9 @@ struct zmk_split_transport_central_command {
         struct {
             zmk_hid_indicators_t indicators;
         } set_hid_indicators;
+
+#ifdef CONFIG_ZMK_SPLIT_RELAY_EVENT
+        struct zmk_split_relay_event_payload relay_event;
+#endif
     } data;
 } __packed;

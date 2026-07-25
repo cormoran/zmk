@@ -29,6 +29,8 @@ struct behavior_tap_dance_config {
     uint32_t tapping_term_ms;
     size_t behavior_count;
     struct zmk_behavior_binding *behaviors;
+    size_t ignore_key_positions_len;
+    uint32_t ignore_key_positions[];
 };
 
 struct active_tap_dance {
@@ -229,6 +231,12 @@ static int tap_dance_position_state_changed_listener(const zmk_event_t *eh) {
         if (tap_dance->position == ev->position) {
             continue;
         }
+        for (int j = 0; j < tap_dance->config->ignore_key_positions_len; j++) {
+            if (tap_dance->config->ignore_key_positions[j] == ev->position) {
+                LOG_DBG("%d bubble (position is in ignore list)", ev->position);
+                continue;
+            }
+        }
         stop_timer(tap_dance);
         LOG_DBG("Tap dance interrupted, activating tap-dance at %d", tap_dance->position);
         if (!tap_dance->tap_dance_decided) {
@@ -267,7 +275,10 @@ static int behavior_tap_dance_init(const struct device *dev) {
     static struct behavior_tap_dance_config behavior_tap_dance_config_##n = {                      \
         .tapping_term_ms = DT_INST_PROP(n, tapping_term_ms),                                       \
         .behaviors = behavior_tap_dance_config_##n##_bindings,                                     \
-        .behavior_count = DT_INST_PROP_LEN(n, bindings)};                                          \
+        .behavior_count = DT_INST_PROP_LEN(n, bindings),                                           \
+        .ignore_key_positions = DT_INST_PROP(n, ignore_key_positions),                             \
+        .ignore_key_positions_len = DT_INST_PROP_LEN(n, ignore_key_positions),                     \
+    };                                                                                             \
     BEHAVIOR_DT_INST_DEFINE(n, behavior_tap_dance_init, NULL, NULL,                                \
                             &behavior_tap_dance_config_##n, POST_KERNEL,                           \
                             CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &behavior_tap_dance_driver_api);

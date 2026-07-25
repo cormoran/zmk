@@ -63,8 +63,10 @@ struct behavior_hold_tap_config {
     bool hold_while_undecided_linger;
     bool retro_tap;
     bool hold_trigger_on_release;
-    int32_t hold_trigger_key_positions_len;
-    int32_t hold_trigger_key_positions[];
+    size_t hold_trigger_key_positions_len;
+    int32_t *hold_trigger_key_positions;
+    size_t ignore_key_positions_len;
+    int32_t *ignore_key_positions;
 };
 
 struct behavior_hold_tap_data {
@@ -734,6 +736,13 @@ static int position_state_changed_listener(const zmk_event_t *eh) {
         return ZMK_EV_EVENT_BUBBLE;
     }
 
+    for (int i = 0; i < undecided_hold_tap->config->ignore_key_positions_len; i++) {
+        if (undecided_hold_tap->config->ignore_key_positions[i] == ev->position) {
+            LOG_DBG("%d bubble (position is in ignore list)", ev->position);
+            return ZMK_EV_EVENT_BUBBLE;
+        }
+    }
+
     // Store the position of pressed key for positional hold-tap purposes.
     if ((undecided_hold_tap->config->hold_trigger_on_release !=
          ev->state) // key has been pressed and hold_trigger_on_release is not set, or key
@@ -858,6 +867,11 @@ static int behavior_hold_tap_init(const struct device *dev) {
 }
 
 #define KP_INST(n)                                                                                 \
+    static int32_t                                                                                 \
+        hold_trigger_key_positions_##n[DT_INST_PROP_LEN(n, hold_trigger_key_positions)] =          \
+            DT_INST_PROP(n, hold_trigger_key_positions);                                           \
+    static int32_t ignore_key_positions_##n[DT_INST_PROP_LEN(n, ignore_key_positions)] =           \
+        DT_INST_PROP(n, ignore_key_positions);                                                     \
     static const struct behavior_hold_tap_config behavior_hold_tap_config_##n = {                  \
         .tapping_term_ms = DT_INST_PROP(n, tapping_term_ms),                                       \
         .hold_behavior_dev = DEVICE_DT_NAME(DT_INST_PHANDLE_BY_IDX(n, bindings, 0)),               \
@@ -871,8 +885,10 @@ static int behavior_hold_tap_init(const struct device *dev) {
         .hold_while_undecided_linger = DT_INST_PROP(n, hold_while_undecided_linger),               \
         .retro_tap = DT_INST_PROP(n, retro_tap),                                                   \
         .hold_trigger_on_release = DT_INST_PROP(n, hold_trigger_on_release),                       \
-        .hold_trigger_key_positions = DT_INST_PROP(n, hold_trigger_key_positions),                 \
+        .hold_trigger_key_positions = hold_trigger_key_positions_##n,                              \
         .hold_trigger_key_positions_len = DT_INST_PROP_LEN(n, hold_trigger_key_positions),         \
+        .ignore_key_positions = ignore_key_positions_##n,                                          \
+        .ignore_key_positions_len = DT_INST_PROP_LEN(n, ignore_key_positions),                     \
     };                                                                                             \
     static struct behavior_hold_tap_data behavior_hold_tap_data_##n = {};                          \
     BEHAVIOR_DT_INST_DEFINE(n, behavior_hold_tap_init, NULL, &behavior_hold_tap_data_##n,          \

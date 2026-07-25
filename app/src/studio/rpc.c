@@ -131,6 +131,13 @@ static bool rpc_tx_buffer_write(pb_ostream_t *stream, const uint8_t *buf, size_t
         uint32_t claim_len = ring_buf_put_claim(&rpc_tx_buf, &write_buf, count - written);
 
         if (claim_len == 0) {
+            /* The TX ring buffer is full. Kick the transport to drain it and
+             * free space before we sleep, otherwise we would just spin here
+             * waiting for a flush that nothing else is going to trigger. The
+             * message is not finished, so msg_done is false: transports flush a
+             * full buffer on their own back-pressure threshold. */
+            selected_transport->tx_notify(&rpc_tx_buf, 0, false, user_data);
+            k_sleep(K_MSEC(1));
             continue;
         }
 
@@ -177,6 +184,7 @@ static pb_ostream_t pb_ostream_for_tx_buf(void *user_data) {
 }
 
 static int send_response(const zmk_studio_Response *resp) {
+    int err = 0;
     k_mutex_lock(&rpc_transport_mutex, K_FOREVER);
 
     if (!selected_transport) {
@@ -188,7 +196,19 @@ static int send_response(const zmk_studio_Response *resp) {
     pb_ostream_t stream = pb_ostream_for_tx_buf(user_data);
 
     uint8_t framing_byte = FRAMING_SOF;
-    ring_buf_put(&rpc_tx_buf, &framing_byte, 1);
+    for (int i = 0;; i++) {
+        if (ring_buf_put(&rpc_tx_buf, &framing_byte, 1) == 1) {
+            break;
+        }
+        if (i > 1000) {
+            LOG_ERR("RPC TX buffer full");
+            err = -ENOMEM;
+            goto exit;
+        }
+        /* Drain the TX ring buffer to make room for the framing byte. */
+        selected_transport->tx_notify(&rpc_tx_buf, 0, false, user_data);
+        k_sleep(K_MSEC(1));
+    }
 
     selected_transport->tx_notify(&rpc_tx_buf, 1, false, user_data);
 
@@ -198,18 +218,34 @@ static int send_response(const zmk_studio_Response *resp) {
     if (!status) {
 #if !IS_ENABLED(CONFIG_NANOPB_NO_ERRMSG)
         LOG_ERR("Failed to encode the message %s", stream.errmsg);
+#else
+        LOG_ERR("Failed to encode the message");
 #endif // !IS_ENABLED(CONFIG_NANOPB_NO_ERRMSG)
+        k_mutex_unlock(&rpc_transport_mutex);
         return -EINVAL;
     }
 
     framing_byte = FRAMING_EOF;
-    ring_buf_put(&rpc_tx_buf, &framing_byte, 1);
+    // If response is large, tx buffer can be full for async transport.
+    for (int i = 0;; i++) {
+        if (ring_buf_put(&rpc_tx_buf, &framing_byte, 1) == 1) {
+            break;
+        }
+        if (i > 1000) {
+            LOG_ERR("RPC TX buffer full");
+            err = -ENOMEM;
+            goto exit;
+        }
+        /* Drain the TX ring buffer to make room for the framing byte. */
+        selected_transport->tx_notify(&rpc_tx_buf, 0, false, user_data);
+        k_sleep(K_MSEC(1));
+    }
 
     selected_transport->tx_notify(&rpc_tx_buf, 1, true, user_data);
 
 exit:
     k_mutex_unlock(&rpc_transport_mutex);
-    return 0;
+    return err;
 }
 
 static void rpc_main(void) {

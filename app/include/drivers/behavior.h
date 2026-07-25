@@ -29,8 +29,8 @@ struct behavior_parameter_value_metadata {
     union {
         uint32_t value;
         struct {
-            int32_t min;
-            int32_t max;
+            uint32_t min;
+            uint32_t max;
         } range;
     };
 

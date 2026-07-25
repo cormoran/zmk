@@ -27,9 +27,10 @@ Definition file: [zmk/app/src/studio/Kconfig](https://github.com/zmkfirmware/zmk
 
 ### Transport/Protocol Details
 
-| Config                                         | Type | Description                                                                   | Default |
-| ---------------------------------------------- | ---- | ----------------------------------------------------------------------------- | ------- |
-| `CONFIG_ZMK_STUDIO_TRANSPORT_BLE_PREF_LATENCY` | int  | Lower latency to request while ZMK Studio is active to improve responsiveness | 10      |
-| `CONFIG_ZMK_STUDIO_RPC_THREAD_STACK_SIZE`      | int  | Stack size for the dedicated RPC thread                                       | 1800    |
-| `CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE`            | int  | Number of bytes available for buffering incoming messages                     | 30      |
-| `CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE`            | int  | Number of bytes available for buffering outgoing messages                     | 64      |
+| Config                                                             | Type | Description                                                                   | Default                             |
+| ------------------------------------------------------------------ | ---- | ----------------------------------------------------------------------------- | ----------------------------------- |
+| `CONFIG_ZMK_STUDIO_TRANSPORT_BLE_PREF_LATENCY`                     | int  | Lower latency to request while ZMK Studio is active to improve responsiveness | 10                                  |
+| `CONFIG_ZMK_STUDIO_RPC_THREAD_STACK_SIZE`                          | int  | Stack size for the dedicated RPC thread                                       | 1800                                |
+| `CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE`                                | int  | Number of bytes available for buffering incoming messages                     | 30                                  |
+| `CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE`                                | int  | Number of bytes available for buffering outgoing messages                     | 64                                  |
+| `CONFIG_ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_REQUEST_PAYLOAD_MAX_BYTES` | int  | Max bytes for custom subsystem request payloads                               | `CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE` |

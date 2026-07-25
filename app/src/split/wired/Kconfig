@@ -51,7 +51,14 @@ config ZMK_SPLIT_WIRED_EVENT_BUFFER_ITEMS
 config ZMK_SPLIT_WIRED_HALF_DUPLEX_RX_TIMEOUT
     int "RX timeout (in ms) when polling peripheral(s) and waiting for any response"
 
+config ZMK_SPLIT_WIRED_HALF_DUPLEX_RX_PROCESS_TIMEOUT
+    int "RX complete timeout (in ms) when polling peripheral(s) after receiving some response data"
+
+
 config ZMK_SPLIT_WIRED_HALF_DUPLEX_RX_COMPLETE_TIMEOUT
     int "RX complete timeout (in ticks) when polling peripheral(s) after receiving some response data"
+
+config ZMK_SPLIT_WIRED_HALF_DUPLEX_TX_DEBOUNCE_TIMEOUT
+    int "TX start debounce timeout (in ms) on the peripheral after receiving a poll command from the central, before beginning TX"
 
 endif

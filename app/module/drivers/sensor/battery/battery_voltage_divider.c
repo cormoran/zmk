@@ -26,6 +26,8 @@ struct bvd_config {
     struct gpio_dt_spec power;
     uint32_t output_ohm;
     uint32_t full_ohm;
+    int16_t *mv_to_pct_thresholds;
+    uint8_t mv_to_pct_thresholds_size;
 };
 
 struct bvd_data {
@@ -74,7 +76,8 @@ static int bvd_sample_fetch(const struct device *dev, enum sensor_channel chan) 
 
         uint16_t millivolts = val * (uint64_t)drv_cfg->full_ohm / drv_cfg->output_ohm;
         LOG_DBG("ADC raw %d ~ %d mV => %d mV", drv_data->value.adc_raw, val, millivolts);
-        uint8_t percent = lithium_ion_mv_to_pct(millivolts);
+        uint8_t percent = mv_to_pct_linear_interpolation(millivolts, drv_cfg->mv_to_pct_thresholds,
+                                                         drv_cfg->mv_to_pct_thresholds_size);
         LOG_DBG("Percent: %d", percent);
 
         drv_data->value.millivolts = millivolts;
@@ -158,7 +161,7 @@ static int bvd_init(const struct device *dev) {
 }
 
 static struct bvd_data bvd_data = {.adc = DEVICE_DT_GET(DT_IO_CHANNELS_CTLR(DT_DRV_INST(0)))};
-
+static int16_t mv_to_pct_thresholds[] = DT_INST_PROP(0, mv_to_pct_thresholds);
 static const struct bvd_config bvd_cfg = {
     .io_channel =
         {
@@ -169,6 +172,8 @@ static const struct bvd_config bvd_cfg = {
 #endif
     .output_ohm = DT_INST_PROP(0, output_ohms),
     .full_ohm = DT_INST_PROP(0, full_ohms),
+    .mv_to_pct_thresholds = mv_to_pct_thresholds,
+    .mv_to_pct_thresholds_size = DT_INST_PROP_LEN(0, mv_to_pct_thresholds),
 };
 
 DEVICE_DT_INST_DEFINE(0, &bvd_init, NULL, &bvd_data, &bvd_cfg, POST_KERNEL,

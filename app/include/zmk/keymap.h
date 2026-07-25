@@ -59,6 +59,11 @@ const struct zmk_behavior_binding *zmk_keymap_get_layer_binding_at_idx(zmk_keyma
 int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer, uint16_t binding_idx,
                                         const struct zmk_behavior_binding binding);
 
+#if IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE)
+const struct zmk_behavior_binding *
+zmk_stock_keymap_get_layer_binding_at_idx(zmk_keymap_layer_id_t layer, uint16_t binding_idx);
+#endif /* IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE) */
+
 #if IS_ENABLED(CONFIG_ZMK_KEYMAP_LAYER_REORDERING)
 
 int zmk_keymap_add_layer(void);
@@ -78,6 +83,19 @@ int zmk_keymap_set_layer_name(zmk_keymap_layer_id_t id, const char *name, size_t
  * @retval 1 if there are changes.
  */
 int zmk_keymap_check_unsaved_changes(void);
+
+/**
+ * @brief Check whether the binding at a position has an unsaved, in-memory only
+ *        change (edited but not yet persisted to storage).
+ *
+ * @p binding_idx is interpreted in the currently selected physical layout's
+ * binding order, matching zmk_keymap_get_layer_binding_at_idx().
+ *
+ * @retval 1 if the binding has a pending change that would be written on save.
+ * @retval 0 if the binding has no pending change.
+ * @retval -errno on error (including -ENOTSUP when keymap settings storage is disabled).
+ */
+int zmk_keymap_layer_binding_at_idx_is_pending(zmk_keymap_layer_id_t layer_id, uint16_t binding_idx);
 
 int zmk_keymap_save_changes(void);
 int zmk_keymap_discard_changes(void);

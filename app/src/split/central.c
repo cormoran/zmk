@@ -72,6 +72,18 @@ int zmk_split_transport_central_peripheral_event_handler(
 
         return raise_zmk_sensor_event(sensor_ev);
     }
+    case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_HEART_BEAT_EVENT:
+        return 0;
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
+    case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_RELAY_EVENT: {
+        struct zmk_relay_event_received relay_ev;
+        relay_ev.source = source;
+        relay_ev.event_name = ev.data.relay_event.event_type;
+        relay_ev.event_data = ev.data.relay_event.event_data;
+        relay_ev.event_data_size = ev.data.relay_event.header.event_data_size;
+        return raise_zmk_relay_event_received(relay_ev);
+    }
+#endif
     default:
         LOG_WRN("GOT AN UNKNOWN EVENT TYPE %d", ev.type);
         return -ENOTSUP;
@@ -109,6 +121,46 @@ int zmk_split_central_invoke_behavior(uint8_t source, struct zmk_behavior_bindin
 
     return active_transport->api->send_command(source, command);
 };
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
+
+int zmk_split_central_send_relay_event(struct zmk_split_relay_event_payload *payload) {
+    if (!active_transport || !active_transport->api || !active_transport->api->send_command) {
+        return -ENODEV;
+    }
+
+    struct zmk_split_transport_central_command command =
+        (struct zmk_split_transport_central_command){
+            .type = ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_RELAY_EVENT,
+            .data =
+                {
+                    .relay_event = *payload,
+                },
+        };
+
+    // Relay events are broadcast to every currently reachable peripheral.
+    uint8_t source_ids[ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT] = {0};
+    int count = 1;
+    if (active_transport->api->get_available_source_ids) {
+        count = active_transport->api->get_available_source_ids(source_ids);
+        if (count < 0) {
+            return count;
+        }
+    }
+
+    int ret = 0;
+    for (int i = 0; i < count; i++) {
+        int err = active_transport->api->send_command(source_ids[i], command);
+        if (err < 0) {
+            // Keep sending to the remaining peripherals, but report the failure.
+            ret = err;
+        }
+    }
+
+    return ret;
+}
+
+#endif // IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
 

@@ -6,6 +6,10 @@
 
 #include <zmk/studio/core.h>
 
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_LOCK_BLE_DIRECT_ADVERTISING_ON_UNLOCK)
+#include <zmk/ble.h>
+#endif
+
 ZMK_EVENT_IMPL(zmk_studio_core_lock_state_changed);
 
 static enum zmk_studio_core_lock_state state = IS_ENABLED(CONFIG_ZMK_STUDIO_LOCKING)
@@ -42,9 +46,16 @@ void zmk_studio_core_reschedule_lock_timeout() {}
 #endif
 
 void zmk_studio_core_unlock() {
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_LOCK_BLE_DIRECT_ADVERTISING_ON_UNLOCK)
+    zmk_ble_set_directed_advertising(true);
+#endif
     set_state(ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED);
-
     zmk_studio_core_reschedule_lock_timeout();
 }
 
-void zmk_studio_core_lock() { set_state(ZMK_STUDIO_CORE_LOCK_STATE_LOCKED); }
+void zmk_studio_core_lock() {
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_LOCK_BLE_DIRECT_ADVERTISING_ON_UNLOCK)
+    zmk_ble_set_directed_advertising(false);
+#endif
+    set_state(ZMK_STUDIO_CORE_LOCK_STATE_LOCKED);
+}

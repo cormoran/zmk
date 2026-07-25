@@ -42,6 +42,13 @@ struct msg_postfix {
     uint32_t crc;
 } __packed;
 
+// The envelope prefix carries the payload size in a single byte, so the
+// (config-dependent) payloads must stay within that limit.
+BUILD_ASSERT(sizeof(struct command_payload) <= UINT8_MAX,
+             "Wired split command payload does not fit the 8-bit envelope payload size");
+BUILD_ASSERT(sizeof(struct event_payload) <= UINT8_MAX,
+             "Wired split event payload does not fit the 8-bit envelope payload size");
+
 #define MSG_EXTRA_SIZE (sizeof(struct msg_prefix) + sizeof(struct msg_postfix))
 
 typedef void (*zmk_split_wired_process_tx_callback_t)(void);
