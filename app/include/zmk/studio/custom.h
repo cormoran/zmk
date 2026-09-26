@@ -56,23 +56,34 @@ struct zmk_rpc_custom_subsystem {
     char *identifier;
     struct zmk_rpc_custom_subsystem_meta *meta;
     custom_subsystem_handler *handler;
+    uint32_t version;
 };
 
 /**
- * Registers a custom RPC subsystem.
+ * Registers a custom RPC subsystem with an API version.
  * @param _identifier Unique identifier string for the custom subsystem.
+ * @param _version Subsystem-defined uint32 API version used for client compatibility checks.
+ *                 Zero means unspecified.
  * @param _meta Pointer to zmk_rpc_custom_subsystem_meta struct defining metadata.
  * @param _handler Function pointer to the handler function for CallRequests.
  */
-#define ZMK_RPC_CUSTOM_SUBSYSTEM(_identifier, _meta, _handler)                                     \
+#define ZMK_RPC_CUSTOM_SUBSYSTEM_WITH_VERSION(_identifier, _version, _meta, _handler)              \
     BUILD_ASSERT(sizeof(#_identifier) < CONFIG_ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_IDENTIFIER_MAX_LEN, \
                  "Identifier too long: " #_identifier);                                            \
     static bool _handler(const zmk_custom_CallRequest *req, pb_callback_t *res);                   \
     STRUCT_SECTION_ITERABLE(zmk_rpc_custom_subsystem, zmk_rpc_custom_subsystem_##_identifier) = {  \
         .identifier = #_identifier,                                                                \
         .meta = _meta,                                                                             \
+        .version = _version,                                                                       \
         .handler = _handler,                                                                       \
     };
+
+/**
+ * Registers a custom RPC subsystem with an unspecified API version (0).
+ * Existing registrations remain source compatible.
+ */
+#define ZMK_RPC_CUSTOM_SUBSYSTEM(_identifier, _meta, _handler)                                     \
+    ZMK_RPC_CUSTOM_SUBSYSTEM_WITH_VERSION(_identifier, 0, _meta, _handler)
 
 /**
  * Helper macro to define UI URLs array in zmk_rpc_custom_subsystem_meta.

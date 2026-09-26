@@ -43,7 +43,7 @@ manifest:
     - name: zmk-studio-messages
       # custom-studio-protocol
       remote: cormoran
-      revision: 89b81d2e587fce807b668dff2a6967a40beef421
+      revision: 915e18e1aafdb4c0dd287ae9d982c81e20d279a6
       path: modules/msgs/zmk-studio-messages
   group-filter: [+optional]
   self:
