@@ -1,0 +1,8 @@
+tests:
+  zmk.behavior_queue:
+    platform_allow: [native_sim, native_sim/native/64]
+    tags: behavior_queue
+  zmk.behavior_queue.split:
+    platform_allow: [native_sim, native_sim/native/64]
+    tags: behavior_queue
+    extra_args: TEST_SPLIT=y

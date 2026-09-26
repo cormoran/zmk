@@ -1,0 +1,74 @@
+name: Sync upstream commits
+
+on:
+  schedule:
+    - cron: "0 15 * * 5"
+  workflow_dispatch:
+
+env:
+  UPSTREAM_REPO: zmkfirmware/zmk
+  UPSTREAM_BRANCH: main
+  PULL_REQUEST_BRANCH: workflow/sync-upstream
+
+jobs:
+  sync:
+    strategy:
+      fail-fast: false
+      matrix:
+        branch:
+          - main
+          - main+dya
+          - main+nrf-half-duplex-uart
+          - main+custom-studio-protocol
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Add upstream remote
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git || true
+          git fetch upstream ${{ env.UPSTREAM_BRANCH }}
+      - name: Sync with upstream
+        id: check
+        run: |
+          git fetch origin ${{ matrix.branch }}
+          git checkout -b ${{ env.PULL_REQUEST_BRANCH }}/${{ matrix.branch }} origin/${{ matrix.branch }}
+          read ONLY_IN_ORIGIN ONLY_IN_UPSTREAM <<< $(git rev-list --left-right --count origin/${{ matrix.branch }}...upstream/${{ env.UPSTREAM_BRANCH }})
+          echo "only_in_origin=$ONLY_IN_ORIGIN" >> $GITHUB_OUTPUT
+          echo "only_in_upstream=$ONLY_IN_UPSTREAM" >> $GITHUB_OUTPUT
+      - name: Update ${{ env.PULL_REQUEST_BRANCH }}/${{ matrix.branch }} branch
+        if: steps.check.outputs.only_in_upstream != '0'
+        run: |
+          git merge upstream/${{ env.UPSTREAM_BRANCH }} --no-edit
+          git push origin ${{ env.PULL_REQUEST_BRANCH }}/${{ matrix.branch }} --force
+      - name: Check pull request already exists
+        id: check_pr
+        run: |
+          gh repo set-default ${{ github.repository }}
+          PR_COUNT=$(gh pr list \
+            --head ${{ env.PULL_REQUEST_BRANCH }}/${{ matrix.branch }} \
+            --base ${{ matrix.branch }} \
+            --state open \
+            --json number \
+            | jq length)
+          echo "count=$PR_COUNT" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create PR to ${{ matrix.branch }} branch
+        if: steps.check_pr.outputs.count == '0' && steps.check.outputs.only_in_upstream != '0'
+        run: |
+          gh pr create \
+            --base ${{ matrix.branch }} \
+            --head ${{ env.PULL_REQUEST_BRANCH }}/${{ matrix.branch }} \
+            --title "[Sync] Merge ${{ env.UPSTREAM_REPO }}:${{ env.UPSTREAM_BRANCH }} to ${{ matrix.branch }}" \
+            --body "This PR syncs the ${{ matrix.branch }} branch with the latest changes from the upstream [${{ env.UPSTREAM_REPO }}:${{ env.UPSTREAM_BRANCH }}](https://github.com/${{ env.UPSTREAM_REPO }}/tree/${{ env.UPSTREAM_BRANCH }})"
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_PR }}
