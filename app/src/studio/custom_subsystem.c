@@ -65,6 +65,7 @@ static bool list_custom_subsystems_encode_subsystems(pb_ostream_t *stream, const
         STRUCT_SECTION_GET(zmk_rpc_custom_subsystem, i, &custom_subsys);
         zmk_custom_CustomSubsystemInfo subsystem_info = zmk_custom_CustomSubsystemInfo_init_zero;
         subsystem_info.index = i;
+        subsystem_info.version = custom_subsys->version;
         strncpy(subsystem_info.identifier, custom_subsys->identifier,
                 CONFIG_ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_IDENTIFIER_MAX_LEN);
         subsystem_info.ui_url.funcs.encode = list_custom_subsystems_encode_ui_urls;

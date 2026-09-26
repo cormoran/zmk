@@ -135,3 +135,19 @@ The USB transport is actually a basic serial/UART transport, that happens to use
 ### Bluetooth (GATT)
 
 The bluetooth transport uses a custom GATT service to transmit/receive. The service has UUID `00000000-0196-6107-c967-c5cfb1c2482a` and has exactly one characteristic with UUID `00000001-0196-6107-c967-c5cfb1c2482a`. The characteristic accepts writes of framed client messages, and will use GATT Indications to send framed messages to the client.
+
+## Custom subsystem API versions
+
+Custom subsystem discovery returns a subsystem-defined `uint32 version` in each
+`CustomSubsystemInfo`. Clients can use the identifier and version to check that
+an API is supported before sending module-specific payloads. Version semantics
+belong to the subsystem; `0` means unspecified, including older firmware.
+
+Register an explicit API version with:
+
+```c
+ZMK_RPC_CUSTOM_SUBSYSTEM_WITH_VERSION(my_subsystem, 1, &my_meta, my_handler);
+```
+
+The existing `ZMK_RPC_CUSTOM_SUBSYSTEM(my_subsystem, &my_meta, my_handler)`
+registration remains supported and advertises version `0`.
