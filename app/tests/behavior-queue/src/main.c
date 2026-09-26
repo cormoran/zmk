@@ -57,7 +57,7 @@ int zmk_behavior_invoke_binding(const struct zmk_behavior_binding *src_binding,
         struct zmk_behavior_binding_event nested = event;
         nested.position = 2;
         /* The callback's own 100ms wait leaves only 20ms for this binding. */
-        zassert_ok(zmk_behavior_queue_add(&nested, binding, false, 50, now + 120));
+        zassert_ok(zmk_behavior_queue_add_with_deadline(&nested, binding, false, 50, now + 120));
         zassert_equal(calls, 1, "Nested enqueue must not invoke recursively");
     }
     return 0;
@@ -77,7 +77,7 @@ static void before(void *fixture) {
 }
 
 static int add(uint32_t wait, uint32_t deadline) {
-    return zmk_behavior_queue_add(&event, binding, true, wait, deadline);
+    return zmk_behavior_queue_add_with_deadline(&event, binding, true, wait, deadline);
 }
 
 static void resume(int64_t at) {
@@ -87,9 +87,9 @@ static void resume(int64_t at) {
 }
 
 ZTEST(behavior_queue, test_no_deadline_fifo) {
-    zassert_ok(add(100, 0));
+    zassert_ok(zmk_behavior_queue_add(&event, binding, true, 100));
     event.position = 2;
-    zassert_ok(zmk_behavior_queue_add(&event, binding, false, 0, 0));
+    zassert_ok(zmk_behavior_queue_add(&event, binding, false, 0));
     event.position = 1;
     zassert_equal(calls, 1);
     resume(1100);

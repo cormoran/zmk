@@ -172,14 +172,14 @@ static void queue_macro(struct zmk_behavior_binding_event *event,
 
             switch (state.mode) {
             case MACRO_MODE_TAP:
-                zmk_behavior_queue_add(event, binding, true, state.tap_ms, 0);
-                zmk_behavior_queue_add(event, binding, false, state.wait_ms, 0);
+                zmk_behavior_queue_add(event, binding, true, state.tap_ms);
+                zmk_behavior_queue_add(event, binding, false, state.wait_ms);
                 break;
             case MACRO_MODE_PRESS:
-                zmk_behavior_queue_add(event, binding, true, state.wait_ms, 0);
+                zmk_behavior_queue_add(event, binding, true, state.wait_ms);
                 break;
             case MACRO_MODE_RELEASE:
-                zmk_behavior_queue_add(event, binding, false, state.wait_ms, 0);
+                zmk_behavior_queue_add(event, binding, false, state.wait_ms);
                 break;
             default:
                 LOG_ERR("Unknown macro mode: %d", state.mode);

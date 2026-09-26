@@ -101,9 +101,9 @@ static void behavior_queue_process_next(struct k_work *work) {
     k_spin_unlock(&queue_lock, key);
 }
 
-int zmk_behavior_queue_add(const struct zmk_behavior_binding_event *event,
-                           const struct zmk_behavior_binding binding, bool press, uint32_t wait,
-                           uint32_t deadline) {
+int zmk_behavior_queue_add_with_deadline(const struct zmk_behavior_binding_event *event,
+                                         const struct zmk_behavior_binding binding, bool press,
+                                         uint32_t wait, uint32_t deadline) {
     struct q_item item = {
         .press = press,
         .binding = binding,
@@ -145,4 +145,9 @@ int zmk_behavior_queue_add(const struct zmk_behavior_binding_event *event,
     }
 
     return 0;
+}
+
+int zmk_behavior_queue_add(const struct zmk_behavior_binding_event *event,
+                           const struct zmk_behavior_binding binding, bool press, uint32_t wait) {
+    return zmk_behavior_queue_add_with_deadline(event, binding, press, wait, 0);
 }

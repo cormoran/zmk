@@ -11,7 +11,13 @@
 #include <zmk/behavior.h>
 
 /**
- * @brief Queue a binding followed by a wait in milliseconds.
+ * @brief Queue a binding followed by an unrestricted wait in milliseconds.
+ */
+int zmk_behavior_queue_add(const struct zmk_behavior_binding_event *event,
+                           const struct zmk_behavior_binding behavior, bool press, uint32_t wait);
+
+/**
+ * @brief Queue a binding followed by a wait in milliseconds, with a deadline.
  *
  * @param deadline Absolute uptime in milliseconds (low 32 bits), or zero for
  *                 no deadline. Nonzero deadlines must be less than INT32_MAX
@@ -27,6 +33,6 @@
  * @retval 0 Queued or discarded due to the deadline.
  * @retval Negative errno code if the queue is full.
  */
-int zmk_behavior_queue_add(const struct zmk_behavior_binding_event *event,
-                           const struct zmk_behavior_binding behavior, bool press, uint32_t wait,
-                           uint32_t deadline);
+int zmk_behavior_queue_add_with_deadline(const struct zmk_behavior_binding_event *event,
+                                         const struct zmk_behavior_binding behavior, bool press,
+                                         uint32_t wait, uint32_t deadline);
